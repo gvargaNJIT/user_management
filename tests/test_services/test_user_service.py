@@ -4,6 +4,7 @@ from sqlalchemy import select
 from app.dependencies import get_settings
 from app.models.user_model import User, UserRole
 from app.services.user_service import UserService
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.utils.nickname_gen import generate_nickname
 
 pytestmark = pytest.mark.asyncio
@@ -83,6 +84,11 @@ async def test_delete_user_does_not_exist(db_session):
     non_existent_user_id = "non-existent-id"
     deletion_success = await UserService.delete(db_session, non_existent_user_id)
     assert deletion_success is False
+
+@pytest.fixture(autouse=True)
+async def clean_users_table(async_session: AsyncSession):
+    await async_session.execute("TRUNCATE TABLE users RESTART IDENTITY CASCADE;")
+    await async_session.commit()
 
 # Test listing users with pagination
 async def test_list_users_with_pagination(db_session, users_with_same_role_50_users):
