@@ -85,11 +85,6 @@ async def test_delete_user_does_not_exist(db_session):
     deletion_success = await UserService.delete(db_session, non_existent_user_id)
     assert deletion_success is False
 
-@pytest.fixture(autouse=True)
-async def clean_users_table(async_session: AsyncSession):
-    await async_session.execute("TRUNCATE TABLE users RESTART IDENTITY CASCADE;")
-    await async_session.commit()
-
 # Test listing users with pagination
 async def test_list_users_with_pagination(db_session, users_with_same_role_50_users):
     users_page_1 = await UserService.list_users(db_session, skip=0, limit=10)
