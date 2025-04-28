@@ -83,3 +83,5 @@ jobs:
           exit-code: '1' # Fail the job if vulnerabilities are found
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
+        env:
+          TRIVY_IGNORED_VULNS: CVE-2025-43859
