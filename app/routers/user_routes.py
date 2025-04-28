@@ -21,7 +21,7 @@ Key Highlights:
 from builtins import dict, int, len, str
 from datetime import timedelta
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Response, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Response, status, Request, Form
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_current_user, get_db, get_email_service, require_role
@@ -200,11 +200,11 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_db
     raise HTTPException(status_code=400, detail="Email already exists")
 
 @router.post("/login/", response_model=TokenResponse, tags=["Login and Registration"])
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), session: AsyncSession = Depends(get_db)):
-    if await UserService.is_account_locked(session, form_data.username):
+async def login(email: str = Form(...), password: str = Form(...), session: AsyncSession = Depends(get_db)):
+    if await UserService.is_account_locked(session, email):
         raise HTTPException(status_code=400, detail="Account locked due to too many failed login attempts.")
 
-    user = await UserService.login_user(session, form_data.username, form_data.password)
+    user = await UserService.login_user(session, email, password)
     if user:
         access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
 
@@ -217,11 +217,11 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), session: Async
     raise HTTPException(status_code=401, detail="Incorrect email or password.")
 
 @router.post("/login/", include_in_schema=False, response_model=TokenResponse, tags=["Login and Registration"])
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), session: AsyncSession = Depends(get_db)):
-    if await UserService.is_account_locked(session, form_data.username):
+async def login(email: str = Form(...), password: str = Form(...), session: AsyncSession = Depends(get_db)):
+    if await UserService.is_account_locked(session, email):
         raise HTTPException(status_code=400, detail="Account locked due to too many failed login attempts.")
 
-    user = await UserService.login_user(session, form_data.username, form_data.password)
+    user = await UserService.login_user(session, email, password)
     if user:
         access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
 
