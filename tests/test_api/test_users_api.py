@@ -89,7 +89,7 @@ from urllib.parse import urlencode
 async def test_login_success(async_client, verified_user):
     # Attempt to login with the test user
     form_data = {
-        "email": verified_user.email,
+        "username": verified_user.email,
         "password": "MySuperPassword$1234"
     }
     response = await async_client.post("/login/", data=urlencode(form_data), headers={"Content-Type": "application/x-www-form-urlencoded"})
@@ -108,7 +108,7 @@ async def test_login_success(async_client, verified_user):
 @pytest.mark.asyncio
 async def test_login_user_not_found(async_client):
     form_data = {
-        "email": "nonexistentuser@here.edu",
+        "username": "nonexistentuser@here.edu",
         "password": "DoesNotMatter123!"
     }
     response = await async_client.post("/login/", data=urlencode(form_data), headers={"Content-Type": "application/x-www-form-urlencoded"})
@@ -118,7 +118,7 @@ async def test_login_user_not_found(async_client):
 @pytest.mark.asyncio
 async def test_login_incorrect_password(async_client, verified_user):
     form_data = {
-        "email": verified_user.email,
+        "username": verified_user.email,
         "password": "IncorrectPassword123!"
     }
     response = await async_client.post("/login/", data=urlencode(form_data), headers={"Content-Type": "application/x-www-form-urlencoded"})
@@ -128,7 +128,7 @@ async def test_login_incorrect_password(async_client, verified_user):
 @pytest.mark.asyncio
 async def test_login_unverified_user(async_client, unverified_user):
     form_data = {
-        "email": unverified_user.email,
+        "username": unverified_user.email,
         "password": "MySuperPassword$1234"
     }
     response = await async_client.post("/login/", data=urlencode(form_data), headers={"Content-Type": "application/x-www-form-urlencoded"})
@@ -137,7 +137,7 @@ async def test_login_unverified_user(async_client, unverified_user):
 @pytest.mark.asyncio
 async def test_login_locked_user(async_client, locked_user):
     form_data = {
-        "email": locked_user.email,
+        "username": locked_user.email,
         "password": "MySuperPassword$1234"
     }
     response = await async_client.post("/login/", data=urlencode(form_data), headers={"Content-Type": "application/x-www-form-urlencoded"})
