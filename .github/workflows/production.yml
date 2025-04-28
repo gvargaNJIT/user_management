@@ -77,8 +77,6 @@ jobs:
           
       - name: Scan the Docker image
         uses: aquasecurity/trivy-action@master
-        env:
-          TRIVY_IGNORED_VULNS: CVE-2025-43859
         with:
           image-ref: 'nickanick99/user_management:${{ github.sha }}'
           format: 'table'
