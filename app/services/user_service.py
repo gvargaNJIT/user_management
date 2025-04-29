@@ -1,5 +1,6 @@
 from builtins import Exception, bool, classmethod, int, str
 from datetime import datetime, timezone
+from fastapi import UploadFile, HTTPException
 import secrets
 from typing import Optional, Dict, List
 from pydantic import ValidationError
@@ -11,6 +12,7 @@ from app.models.user_model import User
 from app.schemas.user_schemas import UserCreate, UserUpdate
 from app.utils.nickname_gen import generate_nickname
 from app.utils.security import generate_verification_token, hash_password, verify_password
+from app.utils.minio_client import save_image, get_image
 from uuid import UUID
 from app.services.email_service import EmailService
 from app.models.user_model import UserRole
@@ -201,3 +203,35 @@ class UserService:
             await session.commit()
             return True
         return False
+    
+    @staticmethod
+    async def update_profile_picture(db: AsyncSession, user_id: UUID, file_data: bytes, file_name: str):
+        # Fetch user from DB
+        stmt = select(User).where(User.id == user_id)
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
+    
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+    
+        # Save image and get the MinIO URL
+        profile_picture_url = await save_image(file_data, file_name)
+    
+        # Update user's profile picture URL in the database
+        user.profile_picture_url = profile_picture_url
+        db.add(user)
+        await db.commit()
+    
+        return user
+
+    @staticmethod
+    async def get_profile_picture(db: AsyncSession, user_id: UUID):
+        # Fetch user from DB
+        user = await db.execute(select(User).where(User.id == user_id))
+        user = user.scalars().first()
+        if not user or not user.profile_picture_url:
+            raise HTTPException(status_code=404, detail="Profile picture not found")
+        
+        # Retrieve the image from storage
+        image_stream = await get_image(user.profile_picture_url)
+        return image_stream

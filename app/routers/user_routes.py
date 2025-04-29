@@ -21,8 +21,9 @@ Key Highlights:
 from builtins import dict, int, len, str
 from datetime import timedelta
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Response, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Response, status, Request, Form, UploadFile, File
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_current_user, get_db, get_email_service, require_role
 from app.schemas.pagination_schema import EnhancedPagination
@@ -50,6 +51,7 @@ async def get_user(user_id: UUID, request: Request, db: AsyncSession = Depends(g
         db: Dependency that provides an AsyncSession for database access.
         token: The OAuth2 access token obtained through OAuth2PasswordBearer dependency.
     """
+    router = APIRouter()
     user = await UserService.get_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -245,3 +247,19 @@ async def verify_email(user_id: UUID, token: str, db: AsyncSession = Depends(get
     if await UserService.verify_email_with_token(db, user_id, token):
         return {"message": "Email verified successfully"}
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification token")
+
+
+@router.post("/users/{user_id}/profile-picture/", tags=["Personalize Account"])
+async def upload_profile_picture(user_id: UUID, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+    """
+    Endpoint to upload a profile picture for the user.
+    """
+    file_data = await file.read()
+    file_name = f"{user_id}_profile_picture.{file.filename.split('.')[-1]}"
+    
+    user = await UserService.update_profile_picture(db, user_id, file_data, file_name)
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return {"profile_picture_url": user.profile_picture_url}
