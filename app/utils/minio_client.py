@@ -4,9 +4,8 @@ from fastapi import UploadFile
 from minio import Minio
 from minio.error import S3Error
 
-# Initialize the MinIO client
 minio_client = Minio(
-    "minio:9000",               # Hostname from docker-compose service name
+    "minio:9000",
     access_key="minioadmin",
     secret_key="minioadmin123",
     secure=False
@@ -44,25 +43,15 @@ def get_image(file_name: str) -> io.BytesIO:
     except Exception as e:
         raise Exception(f"Error retrieving image: {str(e)}")
 
-def generate_unique_filename(extension: str) -> str:
-    """
-    Generate a unique file name using UUID.
-    """
-    import uuid
-    unique_id = uuid.uuid4()
-    return f"{unique_id}{extension}"
-
 def upload_default_image_if_missing():
     """
     Upload the default profile picture to MinIO if it's not already there.
     """
     ensure_bucket()
     try:
-        # Check if default image exists
         minio_client.stat_object(BUCKET_NAME, DEFAULT_IMAGE_NAME)
     except S3Error as e:
         if e.code == "NoSuchKey":
-            # Upload default image
             if not os.path.exists(DEFAULT_IMAGE_PATH):
                 raise FileNotFoundError(f"Default profile image not found at {DEFAULT_IMAGE_PATH}")
             minio_client.fput_object(
