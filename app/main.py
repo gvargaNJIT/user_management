@@ -4,6 +4,7 @@ from starlette.responses import JSONResponse
 from starlette.middleware.cors import CORSMiddleware  # Import the CORSMiddleware
 from app.database import Database
 from app.dependencies import get_settings
+from app.utils.minio_client import upload_default_image_if_missing
 from app.routers import user_routes
 from app.utils.api_description import getDescription
 app = FastAPI(
@@ -32,11 +33,13 @@ app.add_middleware(
 async def startup_event():
     settings = get_settings()
     Database.initialize(settings.database_url, settings.debug)
+    upload_default_image_if_missing()
 
 @app.exception_handler(Exception)
 async def exception_handler(request, exc):
     return JSONResponse(status_code=500, content={"message": "An unexpected error occurred."})
 
 app.include_router(user_routes.router)
+
 
 

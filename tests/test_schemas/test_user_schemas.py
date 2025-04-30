@@ -14,7 +14,7 @@ def user_base_data():
         "last_name": "Doe",
         "role": "AUTHENTICATED",
         "bio": "I am a software engineer with over 5 years of experience.",
-        "profile_picture_url": "https://example.com/profile_pictures/john_doe.jpg",
+        "profile_picture_url": "john_doe.jpg",
         "linkedin_profile_url": "https://linkedin.com/in/johndoe",
         "github_profile_url": "https://github.com/johndoe"
     }
@@ -97,14 +97,14 @@ def test_user_base_nickname_invalid(nickname, user_base_data):
         UserBase(**user_base_data)
 
 # Parametrized tests for URL validation
-@pytest.mark.parametrize("url", ["http://valid.com/profile.jpg", "https://valid.com/profile.png", None])
+@pytest.mark.parametrize("url", ["http://valid.com/profile", "https://valid.com/profile", None])
 def test_user_base_url_valid(url, user_base_data):
-    user_base_data["profile_picture_url"] = url
+    user_base_data["linkedin_profile_url"] = url
     user = UserBase(**user_base_data)
-    assert user.profile_picture_url == url
+    assert user.linkedin_profile_url == url
 
 @pytest.mark.parametrize("url", ["ftp://invalid.com/profile.jpg", "http//invalid", "https//invalid"])
 def test_user_base_url_invalid(url, user_base_data):
-    user_base_data["profile_picture_url"] = url
+    user_base_data["linkedin_profile_url"] = url
     with pytest.raises(ValidationError):
         UserBase(**user_base_data)
