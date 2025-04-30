@@ -17,7 +17,7 @@ Key Highlights:
 - Implements HATEOAS by generating dynamic links for user-related actions, enhancing API discoverability.
 - Utilizes OAuth2PasswordBearer for securing API endpoints, requiring valid access tokens for operations.
 """
-
+import io
 from builtins import dict, int, len, str
 from datetime import timedelta
 from uuid import UUID
@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from PIL import Image
 from app.models.user_model import User
 from app.dependencies import get_current_user, get_db, get_email_service, require_role
 from app.schemas.pagination_schema import EnhancedPagination
@@ -39,6 +40,8 @@ from app.services.email_service import EmailService
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 settings = get_settings()
+MAX_FILE_SIZE_MB = 2
+MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024
 @router.get("/users/{user_id}", response_model=UserResponse, name="get_user", tags=["User Management Requires (Admin or Manager Roles)"])
 async def get_user(user_id: UUID, request: Request, db: AsyncSession = Depends(get_db), token: str = Depends(oauth2_scheme), current_user: dict = Depends(require_role(["ADMIN", "MANAGER"]))):
     """
@@ -252,23 +255,38 @@ async def verify_email(user_id: UUID, token: str, db: AsyncSession = Depends(get
 
 
 @router.post("/users/{user_id}/profile-picture/", tags=["Personalize Account"])
-async def upload_profile_picture(user_id: UUID, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+async def upload_profile_picture(
+    user_id: UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db)
+):
     """
     Endpoint to upload a profile picture for the user.
+    - Caps file size to 2MB.
+    - Resizes image to 236x236 pixels (JPEG format).
     """
     file_data = await file.read()
-    file_name = f"{user_id}_profile_picture.{file.filename.split('.')[-1]}"
-    
-    user = await UserService.update_profile_picture(db, user_id, file_data, file_name)
+
+    if len(file_data) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail=f"File too large. Max size is {MAX_FILE_SIZE_MB}MB")
+
+    try:
+        image = Image.open(io.BytesIO(file_data))
+        image = image.convert("RGB")
+        image = image.resize((236, 236))
+        buffer = io.BytesIO()
+        image.save(buffer, format="JPEG")
+        buffer.seek(0)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid image format")
+
+    file_name = f"{user_id}_profile_picture.jpg"
+    user = await UserService.update_profile_picture(db, user_id, buffer.getvalue(), file_name)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     return {"profile_picture_url": user.profile_picture_url}
-
-from fastapi.responses import StreamingResponse
-from fastapi import HTTPException
-import io
 
 @router.get("/users/{user_id}/profile-picture/", response_class=StreamingResponse, tags=["Personalize Account"])
 async def get_user_profile_picture(
@@ -283,12 +301,10 @@ async def get_user_profile_picture(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    ext = user.profile_picture_url.split('.')[-1].lower()
-    media_type = "image/png" if ext == "png" else "image/jpeg"
     try:
         image_stream = await UserService.get_profile_picture(db, user_id)
-        return StreamingResponse(image_stream, media_type=media_type)
+        return StreamingResponse(image_stream, media_type="image/jpeg")
     except FileNotFoundError:
         default_stream = get_image("DefaultUser.jpg")
-        return StreamingResponse(default_stream, media_type=media_type)
+        return StreamingResponse(default_stream, media_type="image/jpeg")
 

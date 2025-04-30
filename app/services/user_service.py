@@ -199,7 +199,7 @@ class UserService:
         user = await cls.get_by_id(session, user_id)
         if user and user.is_locked:
             user.is_locked = False
-            user.failed_login_attempts = 0  # Optionally reset failed login attempts
+            user.failed_login_attempts = 0
             session.add(user)
             await session.commit()
             return True
@@ -207,7 +207,6 @@ class UserService:
     
     @staticmethod
     async def update_profile_picture(db: AsyncSession, user_id: UUID, file_data: bytes, file_name: str):
-        # Fetch user from DB
         stmt = select(User).where(User.id == user_id)
         result = await db.execute(stmt)
         user = result.scalar_one_or_none()
@@ -215,10 +214,8 @@ class UserService:
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
     
-        # Save image and get the MinIO URL
         profile_picture_url = await save_image(file_data, file_name)
     
-        # Update user's profile picture URL in the database
         user.profile_picture_url = profile_picture_url
         db.add(user)
         await db.commit()
@@ -227,12 +224,10 @@ class UserService:
 
     @staticmethod
     async def get_profile_picture(db: AsyncSession, user_id: UUID):
-        # Fetch user from DB
         user = await db.execute(select(User).where(User.id == user_id))
         user = user.scalars().first()
         if not user or not user.profile_picture_url:
             raise HTTPException(status_code=404, detail="Profile picture not found")
         
-        # Retrieve the image from storage
         image_stream = get_image(user.profile_picture_url)
         return image_stream
