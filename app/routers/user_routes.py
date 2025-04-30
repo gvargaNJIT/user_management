@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.models.user_model import User
 from app.dependencies import get_current_user, get_db, get_email_service, require_role
 from app.schemas.pagination_schema import EnhancedPagination
 from app.schemas.token_schema import TokenResponse
@@ -32,6 +33,7 @@ from app.schemas.user_schemas import LoginRequest, UserBase, UserCreate, UserLis
 from app.services.user_service import UserService
 from app.services.jwt_service import create_access_token
 from app.utils.link_generation import create_user_links, generate_pagination_links
+from app.utils.minio_client import get_image
 from app.dependencies import get_settings
 from app.services.email_service import EmailService
 router = APIRouter()
@@ -263,3 +265,30 @@ async def upload_profile_picture(user_id: UUID, file: UploadFile = File(...), db
         raise HTTPException(status_code=404, detail="User not found")
 
     return {"profile_picture_url": user.profile_picture_url}
+
+from fastapi.responses import StreamingResponse
+from fastapi import HTTPException
+import io
+
+@router.get("/users/{user_id}/profile-picture/", response_class=StreamingResponse, tags=["Personalize Account"])
+async def get_user_profile_picture(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return the actual profile picture file for the user.
+    """
+    user = await UserService.get_by_id(db, user_id)
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    ext = user.profile_picture_url.split('.')[-1].lower()
+    media_type = "image/png" if ext == "png" else "image/jpeg"
+    try:
+        image_stream = await UserService.get_profile_picture(db, user_id)
+        return StreamingResponse(image_stream, media_type=media_type)
+    except FileNotFoundError:
+        default_stream = get_image("DefaultUser.jpg")
+        return StreamingResponse(default_stream, media_type=media_type)
+
