@@ -36,11 +36,11 @@ jobs:
           - 9001:9001
         options: >
           --name minio # Optional, service name 'minio' is usually sufficient for networking
-          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1" # Health check command
+          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
           --health-interval 10s # Check every 10 seconds
           --health-timeout 5s   # Wait up to 5 seconds for the check to pass
           --health-retries 5    # Retry up to 5 times
-          server /data --console-address ":9001" # Command/args passed to the entrypoint
+          server /data --console-address ":9001"
 
     steps:
       - uses: actions/checkout@v4
