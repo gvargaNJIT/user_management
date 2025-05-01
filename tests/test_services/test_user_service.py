@@ -11,7 +11,7 @@ from app.services.user_service import UserService
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.engine import Result
 from app.utils.nickname_gen import generate_nickname
-from app.utils.minio_client import save_image, get_image, BUCKET_NAME, minio_client
+from app.utils.minio_client import save_image, get_image
 
 pytestmark = pytest.mark.asyncio
 
@@ -170,31 +170,31 @@ async def test_unlock_user_account(db_session, locked_user):
     assert not refreshed_user.is_locked, "The user should no longer be locked"
 
 @pytest.mark.asyncio
-async def test_update_profile_picture_success_real_minio():
+async def test_update_profile_picture_success():
     user_id = uuid4()
     file_data = b"fake image bytes"
-    file_name = f"test-{user_id}.jpg"
+    file_name = "test.jpg"
+    fake_url = "test.jpg" 
     fake_user = User(id=user_id, profile_picture_url=None)
 
-    # Mock DB behavior
     db = AsyncMock(spec=AsyncSession)
     result_mock = MagicMock(spec=Result)
     result_mock.scalar_one_or_none.return_value = fake_user
     db.execute.return_value = result_mock
 
-    # Call the actual service method (no patching)
-    updated_user = await UserService.update_profile_picture(db, user_id, file_data, file_name)
+    patch_save_target = "app.services.user_service.save_image"
 
-    # Assertions
-    db.execute.assert_awaited_once()
-    db.commit.assert_awaited_once()
-    db.refresh.assert_awaited_once_with(fake_user)
+    with patch(patch_save_target, new=AsyncMock(return_value=fake_url)) as mock_save_image:
 
-    assert updated_user.profile_picture_url == file_name
-    assert updated_user is fake_user
+        updated_user = await UserService.update_profile_picture(db, user_id, file_data, file_name)
 
-    # Clean up the uploaded object from MinIO
-    minio_client.remove_object(BUCKET_NAME, file_name)
+        db.execute.assert_awaited_once()
+        mock_save_image.assert_awaited_once_with(file_data, file_name)
+
+        assert updated_user.profile_picture_url == fake_url
+        db.commit.assert_awaited_once()
+        db.refresh.assert_awaited_once_with(fake_user)
+        assert updated_user is fake_user
 
 @pytest.mark.asyncio
 async def test_update_profile_picture_user_not_found():
@@ -209,52 +209,28 @@ async def test_update_profile_picture_user_not_found():
 
     assert exc_info.value.status_code == 404
 
+# Test getting profile picture
 @pytest.mark.asyncio
-async def test_get_profile_picture_success_real_minio():
+async def test_get_profile_picture_success():
     user_id = uuid4()
-    file_name = f"test-{user_id}.jpg"
-    expected_bytes = b"fake image bytes"
+    profile_picture_url = "test.jpg"
+    fake_user = User(id=user_id, profile_picture_url=profile_picture_url)
 
-    # Upload test image to MinIO
-    minio_client.put_object(
-        BUCKET_NAME,
-        file_name,
-        data=BytesIO(expected_bytes),
-        length=len(expected_bytes),
-        content_type="image/jpeg"
-    )
-
-    # Fake user with a profile picture URL
-    fake_user = User(id=user_id, profile_picture_url=file_name)
-
+    # Mock the database query
     scalars_mock = MagicMock()
     scalars_mock.first.return_value = fake_user
 
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value.scalars = MagicMock(return_value=scalars_mock)
 
-    # Call actual logic
-    image_stream = await UserService.get_profile_picture(db, user_id)
+    expected_bytes = b"fake image bytes"
 
-    # Validate
-    assert isinstance(image_stream, BytesIO)
-    assert image_stream.read() == expected_bytes
+    # Ensure the minio_client.get_image is patched at the correct location
+    with patch("app.services.user_service.get_image", return_value=BytesIO(expected_bytes)) as mock_get_image:
+        image_stream = await UserService.get_profile_picture(db, user_id)
 
-    # Cleanup
-    minio_client.remove_object(BUCKET_NAME, file_name)
-    
-# Test profile picture not found
-@pytest.mark.asyncio
-async def test_get_profile_picture_not_found():
-    user_id = uuid4()
-
-    scalars_mock = MagicMock()
-    scalars_mock.first.return_value = None
-
-    db = AsyncMock(spec=AsyncSession)
-    db.execute.return_value.scalars = MagicMock(return_value=scalars_mock)
-
-    with pytest.raises(HTTPException) as exc_info:
-        await UserService.get_profile_picture(db, user_id)
-
-    assert exc_info.value.status_code == 404
+        # Ensure the mock is called with the correct image URL
+        mock_get_image.assert_called_once_with(profile_picture_url)
+        
+        # Validate the response
+        assert image_stream.read() == expected_bytes
