@@ -37,9 +37,8 @@ jobs:
         options: >
           --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
           --health-interval 10s --health-timeout 5s --health-retries 5
-        # Fixed entrypoint and command configuration
-        entrypoint: ["/bin/sh", "-c"]
-        command: ["minio server /data --console-address :9001"]
+          --entrypoint sh
+          -- -c "minio server /data --console-address :9001"
 
     steps:
       - uses: actions/checkout@v4
