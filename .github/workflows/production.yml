@@ -11,6 +11,19 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      minio:
+        image: minio/minio
+        ports:
+          - 9000:9000
+        env:
+          MINIO_ACCESS_KEY: minioadmin
+          MINIO_SECRET_KEY: minioadmin
+        options: --command server /data
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: [3.10.12] # Define Python versions here

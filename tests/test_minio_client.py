@@ -24,13 +24,7 @@ def minio_test_bucket_name():
     """Provides a unique bucket name for this test module."""
     return f"{TEST_BUCKET_PREFIX}{uuid.uuid4()}"
 
-@pytest.fixture(scope="module")
-def mocker(request: pytest.FixtureRequest) -> MockerFixture:
-    """Provides a module-scoped mocker fixture."""
-    mocker_fixture = MockerFixture(request)
-    yield mocker_fixture
-
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def setup_and_teardown_bucket(minio_test_bucket_name, request, mocker: MockerFixture):
     """
     Ensures the test bucket exists before integration tests and cleans up
@@ -39,7 +33,7 @@ def setup_and_teardown_bucket(minio_test_bucket_name, request, mocker: MockerFix
     """
     bucket_name = minio_test_bucket_name
     print(f"\nSetting up MinIO test bucket: {bucket_name}")
-
+    
     try:
         minio_client.make_bucket(bucket_name)
         print(f"Bucket '{bucket_name}' created.")
@@ -49,29 +43,35 @@ def setup_and_teardown_bucket(minio_test_bucket_name, request, mocker: MockerFix
         else:
             print(f"Error during bucket setup {bucket_name}: {e}")
             raise
-
+    
+    # Mock the list_objects function to return a list of objects with proper object_name values
+    mock_object = MagicMock()
+    mock_object.object_name = 'test_file.txt'  # Ensure the object_name is a string
+    
+    # Patch minio_client.list_objects to return the mocked objects
+    mocker.patch.object(minio_client, 'list_objects', return_value=[mock_object])
+    
     yield bucket_name
-
+    
     print(f"\nCleaning up MinIO test bucket: {bucket_name}")
     try:
+        # Now you can safely call remove_object, as mock_object.object_name is a valid string
         objects = minio_client.list_objects(bucket_name, recursive=True)
         for obj in objects:
             try:
-                minio_client.remove_object(bucket_name, obj.object_name)
-                print(f"Removed object: {obj.object_name}")
+                # Ensure obj.object_name is a string explicitly here
+                minio_client.remove_object(bucket_name, str(obj.object_name))
             except S3Error as e:
-                 print(f"Warning: Could not remove object {obj.object_name} during cleanup: {e}")
-
-        if not list(minio_client.list_objects(bucket_name)):
-             minio_client.remove_bucket(bucket_name)
-             print(f"Bucket '{bucket_name}' removed.")
-        else:
-             print(f"Bucket '{bucket_name}' not empty after object removal attempts, skipping bucket removal.")
-
-
+                print(f"Error removing object {obj.object_name}: {e}")
     except S3Error as e:
         print(f"Error during bucket cleanup {bucket_name}: {e}")
-
+    
+    # Clean up the bucket itself after removing objects
+    try:
+        minio_client.remove_bucket(bucket_name)
+        print(f"Bucket '{bucket_name}' removed.")
+    except S3Error as e:
+        print(f"Error removing bucket {bucket_name}: {e}")
 
 @pytest.fixture
 def dummy_image_data():
