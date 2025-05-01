@@ -25,20 +25,21 @@ jobs:
         ports:
           - 5432:5432
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      
       minio:
         image: quay.io/minio/minio
         env:
           MINIO_ACCESS_KEY: minioadmin
           MINIO_SECRET_KEY: minioadmin123
-
         ports:
           - 9000:9000
           - 9001:9001
         options: >
           --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
           --health-interval 10s --health-timeout 5s --health-retries 5
-          --entrypoint /bin/sh
-          -c "minio server /data --console-address \":9001\""
+        # Fixed entrypoint and command configuration
+        entrypoint: ["/bin/sh", "-c"]
+        command: ["minio server /data --console-address :9001"]
 
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +65,7 @@ jobs:
       - name: Run tests with Pytest
         env:
           DATABASE_URL: postgresql+asyncpg://user:password@localhost:5432/myappdb
-          MINIO_URL: http://minio:9000
+          MINIO_URL: http://localhost:9000
           MINIO_ACCESS_KEY: minioadmin
           MINIO_SECRET_KEY: minioadmin123
         run: pytest
