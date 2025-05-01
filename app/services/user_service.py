@@ -219,6 +219,7 @@ class UserService:
         user.profile_picture_url = profile_picture_url
         db.add(user)
         await db.commit()
+        await db.refresh(user)
     
         return user
 

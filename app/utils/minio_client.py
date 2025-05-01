@@ -40,8 +40,8 @@ def get_image(file_name: str) -> io.BytesIO:
     try:
         image_data = minio_client.get_object(BUCKET_NAME, file_name)
         return io.BytesIO(image_data.read())
-    except Exception as e:
-        raise Exception(f"Error retrieving image: {str(e)}")
+    except S3Error as e:
+        raise e
 
 def upload_default_image_if_missing():
     """

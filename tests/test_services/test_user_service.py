@@ -1,11 +1,17 @@
 from builtins import range
 import pytest
+from io import BytesIO
+from unittest.mock import AsyncMock, patch, MagicMock
+from uuid import uuid4
+from fastapi import HTTPException
 from sqlalchemy import select
 from app.dependencies import get_settings
 from app.models.user_model import User, UserRole
 from app.services.user_service import UserService
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.engine import Result
 from app.utils.nickname_gen import generate_nickname
+from app.utils.minio_client import save_image, get_image
 
 pytestmark = pytest.mark.asyncio
 
@@ -162,3 +168,83 @@ async def test_unlock_user_account(db_session, locked_user):
     assert unlocked, "The account should be unlocked"
     refreshed_user = await UserService.get_by_id(db_session, locked_user.id)
     assert not refreshed_user.is_locked, "The user should no longer be locked"
+
+# Test updating profile picture
+@pytest.mark.asyncio
+async def test_update_profile_picture_success():
+    user_id = uuid4()
+    file_data = b"fake image bytes"
+    file_name = "test.jpg"
+    fake_url = "test.jpg" 
+    fake_user = User(id=user_id, profile_picture_url=None)
+
+    db = AsyncMock(spec=AsyncSession)
+    result_mock = MagicMock(spec=Result)
+    result_mock.scalar_one_or_none.return_value = fake_user
+    db.execute.return_value = result_mock
+
+    patch_save_target = "app.services.user_service.save_image"
+
+    with patch(patch_save_target, new=AsyncMock(return_value=fake_url)) as mock_save_image:
+
+        updated_user = await UserService.update_profile_picture(db, user_id, file_data, file_name)
+
+        db.execute.assert_awaited_once()
+
+        mock_save_image.assert_awaited_once_with(file_data, file_name)
+
+        assert updated_user.profile_picture_url == fake_url
+
+        db.commit.assert_awaited_once()
+        db.refresh.assert_awaited_once_with(fake_user)
+
+        assert updated_user is fake_user
+
+@pytest.mark.asyncio
+async def test_update_profile_picture_user_not_found():
+    user_id = uuid4()
+    db = AsyncMock(spec=AsyncSession)
+    result_mock = MagicMock(spec=Result)
+    result_mock.scalar_one_or_none.return_value = None
+    db.execute.return_value = result_mock
+
+    with pytest.raises(HTTPException) as exc_info:
+        await UserService.update_profile_picture(db, user_id, b"data", "file.png")
+
+    assert exc_info.value.status_code == 404
+
+# Test getting picture
+@pytest.mark.asyncio
+async def test_get_profile_picture_success():
+    user_id = uuid4()
+    profile_picture_url = "test.jpg"
+    fake_user = User(id=user_id, profile_picture_url=profile_picture_url)
+
+    scalars_mock = MagicMock()
+    scalars_mock.first.return_value = fake_user
+
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value.scalars = MagicMock(return_value=scalars_mock)
+
+    expected_bytes = b"fake image bytes"
+
+    with patch("app.utils.minio_client.get_image", return_value=BytesIO(expected_bytes)) as mock_get_image:
+        image_stream = await UserService.get_profile_picture(db, user_id)
+
+    assert image_stream.read() == expected_bytes
+
+# Test profile picture not found
+@pytest.mark.asyncio
+async def test_get_profile_picture_not_found():
+    user_id = uuid4()
+
+    scalars_mock = MagicMock()
+    scalars_mock.first.return_value = None
+
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value.scalars = MagicMock(return_value=scalars_mock)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await UserService.get_profile_picture(db, user_id)
+
+    assert exc_info.value.status_code == 404
