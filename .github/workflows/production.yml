@@ -13,9 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.10.12] # Define Python versions here
+        python-version: [3.10.12]
 
-    # Define services required for the job
     services:
       postgres:
         image: postgres:latest
@@ -25,30 +24,28 @@ jobs:
           POSTGRES_DB: myappdb
         ports:
           - 5432:5432
-        # Use healthcheck to wait for the service
-        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+        options: >
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
       minio:
-        # Using the standard MinIO image
-        image: quay.io/minio/minio # Or minio/minio, both should work
+        image: quay.io/minio/minio
         env:
-          # Use secrets for access and secret keys for security
-          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
-          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
-          # Optional: If you need the console, you might also set root user/password
-          # MINIO_ROOT_USER: ${{ secrets.MINIO_ACCESS_KEY }} # Often same as access key
-          # MINIO_ROOT_PASSWORD: ${{ secrets.SECRET_SECRET_KEY }} # Often same as secret key
+          MINIO_ACCESS_KEY: minioadmin
+          MINIO_SECRET_KEY: minioadmin123
+
         ports:
-          - 9000:9000 # Default API port
-          - 9001:9001 # Default Console port
-        # Command to start the MinIO server using the default entrypoint
-        command: server /data --console-address ":9001"
-        # Use healthcheck to wait for MinIO to be ready before running tests
-        healthcheck:
-          test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-          interval: 10s # Check every 10 seconds
-          timeout: 5s   # Wait up to 5 seconds for the check to pass
-          retries: 5    # Retry up to 5 times
+          - 9000:9000
+          - 9001:9001
+        options: >
+          --name minio # Optional, service name 'minio' is usually sufficient for networking
+          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1" # Health check command
+          --health-interval 10s # Check every 10 seconds
+          --health-timeout 5s   # Wait up to 5 seconds for the check to pass
+          --health-retries 5    # Retry up to 5 times
+          server /data --console-address ":9001" # Command/args passed to the entrypoint
 
     steps:
       - uses: actions/checkout@v4
@@ -71,31 +68,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # Removed the manual curl wait step, as the healthcheck on the service
-      # is a more robust way for GitHub Actions to wait for the service readiness.
-      # If you still encounter occasional connection issues, you could add
-      # a short sleep here or implement retries in your test setup code.
-      # - name: Test if MinIO is accessible
-      #   run: |
-      #     for i in {1..5}; do curl -s http://minio:9000 && break || sleep 10; done
-
-
       - name: Run tests with Pytest
         env:
-          # Configure the DATABASE_URL environment variable for tests
           DATABASE_URL: postgresql+asyncpg://user:password@localhost:5432/myappdb
-          # Pass MinIO connection details to the test environment
           MINIO_URL: http://minio:9000
-          # Pass secrets to the test environment so your test code can use them
           MINIO_ACCESS_KEY: minioadmin
           MINIO_SECRET_KEY: minioadmin123
         run: pytest
 
   build-and-push-docker:
-    # This job now explicitly depends on the 'test' job passing
     needs: test
     runs-on: ubuntu-latest
-    environment: production # Consider if 'production' environment settings are needed for build
+    environment: production
     steps:
       - uses: actions/checkout@v4
 
@@ -112,9 +96,9 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           push: true
-          tags: nickanick99/user_management:${{ github.sha }} # Uses the Git SHA for tagging
-          platforms: linux/amd64,linux/arm64 # Multi-platform support
-          cache-from: type=registry,ref=kaw393939/wis_club_api:cache # Check this ref, seems like a typo?
+          tags: nickanick99/user_management:${{ github.sha }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=registry,ref=nickanick99/user_management:cache
           cache-to: type=inline,mode=max
 
       - name: Scan the Docker image
